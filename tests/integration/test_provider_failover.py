@@ -1,0 +1,273 @@
+"""Integration tests for provider failover mechanisms."""
+
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from chatbot_ai_system.providers.base import (
+    ChatResponse,
+    CompletionRequest,
+    Message,
+    ProviderError,
+    RateLimitError,
+)
+from chatbot_ai_system.providers.orchestrator import (
+    LoadBalancingStrategy,
+    ProviderOrchestrator,
+)
+
+
+@pytest.mark.integration
+class TestProviderFailover:
+    """Test provider failover mechanisms."""
+
+    @pytest.fixture
+    async def mock_provider_a(self):
+        """Create a mock provider A."""
+        provider = MagicMock()
+        provider.name = "provider_a"
+        provider.status = "healthy"
+        provider.metrics = {"success_rate": 0.95, "average_latency_ms": 100}
+        provider._semaphore = asyncio.Semaphore(10)
+        provider.is_healthy = MagicMock(return_value=True)
+        provider.supports_model = MagicMock(return_value=True)
+        provider.complete = AsyncMock(
+            return_value=ChatResponse(
+                content="Response from Provider A",
+                model="gpt-3.5-turbo",
+                provider="provider_a",
+                cached=False,
+            )
+        )
+        return provider
+
+    @pytest.fixture
+    async def mock_provider_b(self):
+        """Create a mock provider B."""
+        provider = MagicMock()
+        provider.name = "provider_b"
+        provider.status = "healthy"
+        provider.metrics = {"success_rate": 0.90, "average_latency_ms": 150}
+        provider._semaphore = asyncio.Semaphore(10)
+        provider.is_healthy = MagicMock(return_value=True)
+        provider.supports_model = MagicMock(return_value=True)
+        provider.complete = AsyncMock(
+            return_value=ChatResponse(
+                content="Response from Provider B",
+                model="gpt-3.5-turbo",
+                provider="provider_b",
+                cached=False,
+            )
+        )
+        return provider
+
+    @pytest.mark.asyncio
+    async def test_automatic_failover_on_provider_error(self, mock_provider_a, mock_provider_b):
+        """Test automatic failover when primary provider fails."""
+        # Configure provider A to fail
+        mock_provider_a.complete.side_effect = ProviderError(
+            "Service unavailable", provider="provider_a"
+        )
+
+        # Create orchestrator with both providers
+        orchestrator = ProviderOrchestrator(
+            providers=[mock_provider_a, mock_provider_b],
+            strategy=LoadBalancingStrategy.ROUND_ROBIN,
+            enable_circuit_breaker=True,
+        )
+
+        # Make a request
+        messages = [Message(role="user", content="Hello")]
+        request = CompletionRequest(messages=messages, model="gpt-3.5-turbo")
+        response = await orchestrator.complete(request)
+
+        # Should have failed over to provider B
+        assert response.content == "Response from Provider B"
+        assert response.provider == "provider_b"
+        assert orchestrator.failover_count == 1
+
+    @pytest.mark.asyncio
+    async def test_circuit_breaker_activation(self, mock_provider_a, mock_provider_b):
+        """Test circuit breaker activates after multiple failures."""
+        # Configure provider A to always fail
+        mock_provider_a.complete.side_effect = ProviderError(
+            "Persistent error", provider="provider_a"
+        )
+
+        orchestrator = ProviderOrchestrator(
+            providers=[mock_provider_a, mock_provider_b],
+            strategy=LoadBalancingStrategy.ROUND_ROBIN,
+            enable_circuit_breaker=True,
+        )
+
+        # Make multiple requests to trigger circuit breaker
+        for _ in range(6):  # Threshold is 5
+            messages = [Message(role="user", content="Test")]
+            try:
+                request = CompletionRequest(messages=messages, model="gpt-3.5-turbo")
+                await orchestrator.complete(request)
+            except ProviderError:
+                pass
+
+        # Circuit breaker should be open for provider A
+        circuit_breaker = orchestrator.circuit_breakers["provider_a"]
+        assert circuit_breaker.state == "open"
+
+        # Future requests should go directly to provider B
+        messages = [Message(role="user", content="Hello")]
+        request = CompletionRequest(messages=messages, model="gpt-3.5-turbo")
+        response = await orchestrator.complete(request)
+        assert response.provider == "provider_b"
+
+    @pytest.mark.asyncio
+    async def test_rate_limit_handling(self, mock_provider_a, mock_provider_b):
+        """A rate-limited provider is failed over, not retried in place."""
+        call_count = 0
+
+        async def rate_limited_then_success(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise RateLimitError("Rate limit exceeded", provider="provider_a")
+            return ChatResponse(
+                content="Success after retry",
+                model="gpt-3.5-turbo",
+                provider="provider_a",
+                cached=False,
+            )
+
+        mock_provider_a.complete = AsyncMock(side_effect=rate_limited_then_success)
+
+        orchestrator = ProviderOrchestrator(
+            providers=[mock_provider_a, mock_provider_b],
+            strategy=LoadBalancingStrategy.ROUND_ROBIN,
+        )
+
+        messages = [Message(role="user", content="Test")]
+        request = CompletionRequest(messages=messages, model="gpt-3.5-turbo")
+        response = await orchestrator.complete(request)
+
+        # The orchestrator moves to the next healthy provider after a 429 rather than
+        # hammering the limited one; provider A is called exactly once.
+        assert response.provider == "provider_b"
+        assert call_count == 1
+        assert orchestrator.failover_count == 1
+
+    @pytest.mark.asyncio
+    async def test_load_balancing_strategies(self, mock_provider_a, mock_provider_b):
+        """Test different load balancing strategies."""
+        # Test Round Robin
+        orchestrator = ProviderOrchestrator(
+            providers=[mock_provider_a, mock_provider_b],
+            strategy=LoadBalancingStrategy.ROUND_ROBIN,
+        )
+
+        messages = [Message(role="user", content="Test")]
+
+        # First request should go to provider A
+        request1 = CompletionRequest(messages=messages, model="gpt-3.5-turbo")
+        response1 = await orchestrator.complete(request1)
+        assert response1.provider == "provider_a"
+
+        # Second request should go to provider B
+        request2 = CompletionRequest(messages=messages, model="gpt-3.5-turbo")
+        response2 = await orchestrator.complete(request2)
+        assert response2.provider == "provider_b"
+
+        # Third request should go back to provider A
+        request3 = CompletionRequest(messages=messages, model="gpt-3.5-turbo")
+        response3 = await orchestrator.complete(request3)
+        assert response3.provider == "provider_a"
+
+    @pytest.mark.asyncio
+    async def test_all_providers_down_error(self, mock_provider_a, mock_provider_b):
+        """Test error when all providers are down."""
+        # Configure both providers to fail
+        mock_provider_a.is_healthy.return_value = False
+        mock_provider_b.is_healthy.return_value = False
+
+        orchestrator = ProviderOrchestrator(
+            providers=[mock_provider_a, mock_provider_b],
+            strategy=LoadBalancingStrategy.ROUND_ROBIN,
+        )
+
+        messages = [Message(role="user", content="Test")]
+
+        with pytest.raises(ProviderError) as exc_info:
+            request = CompletionRequest(messages=messages, model="gpt-3.5-turbo")
+            await orchestrator.complete(request)
+
+        assert exc_info.value.error_code == "no_providers"
+        assert "No available providers" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_model_specific_routing(self, mock_provider_a, mock_provider_b):
+        """Test routing based on model support."""
+        # Provider A supports GPT models
+        mock_provider_a.supports_model = MagicMock(side_effect=lambda m: m.startswith("gpt"))
+        # Provider B supports Claude models
+        mock_provider_b.supports_model = MagicMock(side_effect=lambda m: m.startswith("claude"))
+
+        orchestrator = ProviderOrchestrator(
+            providers=[mock_provider_a, mock_provider_b],
+            strategy=LoadBalancingStrategy.ROUND_ROBIN,
+        )
+
+        messages = [Message(role="user", content="Test")]
+
+        # Request for GPT model should go to provider A
+        request1 = CompletionRequest(messages=messages, model="gpt-3.5-turbo")
+        response1 = await orchestrator.complete(request1)
+        assert response1.provider == "provider_a"
+
+        # Request for Claude model should go to provider B
+        mock_provider_b.complete.return_value = ChatResponse(
+            content="Claude response",
+            model="claude-3-haiku",
+            provider="provider_b",
+            cached=False,
+        )
+        request2 = CompletionRequest(messages=messages, model="claude-3-haiku")
+        response2 = await orchestrator.complete(request2)
+        assert response2.provider == "provider_b"
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason="_least_loaded_selection picks min(_semaphore._value), i.e. the BUSIEST provider; "
+        "see TEST_TRIAGE escalation",
+    )
+    @pytest.mark.asyncio
+    async def test_concurrent_request_handling(self, mock_provider_a, mock_provider_b):
+        """Under LEAST_LOADED, concurrent requests should spread across providers."""
+        for provider in (mock_provider_a, mock_provider_b):
+            original = provider.complete
+
+            async def busy_complete(request, _orig=original, _sem=provider._semaphore):
+                async with _sem:  # hold a permit so load is observable during the call
+                    await asyncio.sleep(0.01)
+                    return await _orig(request)
+
+            provider.complete = busy_complete
+
+        orchestrator = ProviderOrchestrator(
+            providers=[mock_provider_a, mock_provider_b],
+            strategy=LoadBalancingStrategy.LEAST_LOADED,
+        )
+
+        messages = [Message(role="user", content="Test")]
+
+        # Send multiple concurrent requests
+        tasks = [
+            orchestrator.complete(CompletionRequest(messages=messages, model="gpt-3.5-turbo"))
+            for _ in range(10)
+        ]
+        responses = await asyncio.gather(*tasks)
+
+        # All requests should succeed
+        assert len(responses) == 10
+        assert all(r.content for r in responses)
+
+        # Both providers should have been used
+        providers_used = {r.provider for r in responses}
+        assert "provider_a" in providers_used
+        assert "provider_b" in providers_used

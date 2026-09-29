@@ -1,0 +1,50 @@
+{
+  "timestamp": "2025-10-10T14:28:34.792090",
+  "test_environment": {
+    "python_version": "3.11",
+    "async_framework": "asyncio",
+    "test_framework": "pytest"
+  },
+  "thresholds": {
+    "isolated_ms": 500,
+    "under_load_ms": 700
+  },
+  "test_results": [
+    {
+      "scenario": "Timeout failover",
+      "failure_type": "timeout",
+      "runs": 10,
+      "successful_runs": 10,
+      "avg_failover_ms": 262.30414639940136,
+      "min_failover_ms": 261.5241129969945,
+      "max_failover_ms": 263.5888119984884,
+      "p95_failover_ms": 263.5888119984884,
+      "meets_isolated_threshold": true,
+      "meets_load_threshold": true
+    },
+    {
+      "scenario": "Rate limit failover",
+      "failure_type": "rate_limit",
+      "runs": 10,
+      "successful_runs": 10,
+      "avg_failover_ms": 113.07657219877001,
+      "min_failover_ms": 112.0443809995777,
+      "max_failover_ms": 113.75201000191737,
+      "p95_failover_ms": 113.75201000191737,
+      "meets_isolated_threshold": true,
+      "meets_load_threshold": true
+    },
+    {
+      "scenario": "Server error failover",
+      "failure_type": "server_error",
+      "runs": 10,
+      "successful_runs": 10,
+      "avg_failover_ms": 112.82343310085707,
+      "min_failover_ms": 111.28976399777457,
+      "max_failover_ms": 114.17546900338493,
+      "p95_failover_ms": 114.17546900338493,
+      "meets_isolated_threshold": true,
+      "meets_load_threshold": true
+    }
+  ]
+}
