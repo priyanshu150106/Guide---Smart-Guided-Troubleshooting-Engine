@@ -1,5 +1,7 @@
 # GUIDE — Smart Guided Troubleshooting Engine
 
+![Frontend Preview](docs/preview.png)
+
 ## 1. Problem
 Vague customer complaints about device issues (e.g., "my screen flickers and battery dies fast") are difficult to map to precise technical solutions. Existing generic chatbots provide unstructured advice without deterministic, one-tap actions for the user to solve their issue.
 
