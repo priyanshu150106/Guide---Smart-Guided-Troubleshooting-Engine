@@ -2,6 +2,13 @@
 
 ![Frontend Preview](docs/preview.png)
 
+## Demo & Resources
+- **Demo Video:** [Watch on Google Drive](https://drive.google.com/file/d/1wR_jIJ8MRMK0pl2tYJ8662JHiU56ZbCt/view?usp=sharing)
+- **AI Usage Disclosure Form:** [View Form](AI_USAGE_DISCLOSURE_FORM.md)
+- **Requirements:** [requirements.txt](requirements.txt)
+- **Codebase:** Source code is available in `src/` and `frontend/`
+- **Presentation:** PPT file and other pitch materials are available in the repository.
+
 ## 1. Problem
 Vague customer complaints about device issues (e.g., "my screen flickers and battery dies fast") are difficult to map to precise technical solutions. Existing generic chatbots provide unstructured advice without deterministic, one-tap actions for the user to solve their issue.
 
