@@ -40,7 +40,7 @@ class TracingManager:
     def __init__(self) -> None:
         """Initialize tracing manager."""
         self.enabled = getattr(settings, "JAEGER_ENABLED", False)
-        self.tracer = None
+        self.tracer: Any = None
         self._active_spans: Dict[str, SpanContext] = {}
 
         if self.enabled:

@@ -17,7 +17,8 @@ def make_settings(**aliases):
 def test_app_import_does_not_load_pinecone_or_sklearn():
     # Fresh interpreter: other tests in this process legitimately import both libraries.
     code = (
-        "import sys, chatbot_ai_system.server.main, chatbot_ai_system.vector_store;"
+        "import sys, os; sys.path.insert(0, os.path.abspath('src'));"
+        "import chatbot_ai_system.server.main, chatbot_ai_system.vector_store;"
         "from chatbot_ai_system.vector_store import get_vector_store;"
         "from chatbot_ai_system.config.settings import Settings;"
         "assert get_vector_store(Settings(_env_file=None, ENABLE_VECTOR_SEARCH=False, PINECONE_API_KEY='k')) is None;"

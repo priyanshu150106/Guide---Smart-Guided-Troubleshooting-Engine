@@ -21,7 +21,7 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 
 
 def pytest_runtest_setup(item):
@@ -78,7 +78,7 @@ async def async_client():
     """Async test client fixture."""
     from chatbot_ai_system.server.main import app
 
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         yield client
 
 
@@ -436,7 +436,7 @@ async def async_http_client():
     """HTTP client for integration tests."""
     from chatbot_ai_system.server.main import app
 
-    async with AsyncClient(app=app, base_url="http://localhost:8000") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost:8000") as client:
         yield client
 
 

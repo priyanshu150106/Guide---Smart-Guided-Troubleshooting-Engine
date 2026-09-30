@@ -55,8 +55,6 @@ class RetryHandler:
             )
         )
 
-        attempt = 0
-
         try:
             async for attempt in AsyncRetrying(
                 stop=stop_after_attempt(self.max_attempts),
@@ -74,7 +72,7 @@ class RetryHandler:
                             on_retry(e, attempt.retry_state.attempt_number)
                         raise
         except RetryError as e:
-            raise e.last_attempt.exception() from None
+            raise e.last_attempt.exception() from None  # type: ignore
 
         # This should never be reached
         raise RuntimeError("Retry loop completed without returning")

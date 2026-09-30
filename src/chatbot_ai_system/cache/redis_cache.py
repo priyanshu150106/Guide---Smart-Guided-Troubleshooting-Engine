@@ -247,7 +247,7 @@ class RedisCache:
                     is_compressed = meta_dict.get("compressed", False)
 
                 # Decompress if needed
-                data = self._decompress_data(data, is_compressed)
+                data = self._decompress_data(data, is_compressed)  # type: ignore
 
                 # Parse response
                 response = orjson.loads(data)
@@ -420,7 +420,7 @@ class RedisCache:
                         # Delete keys and their metadata
                         all_keys = []
                         for k in keys:
-                            all_keys.extend([k, f"{k}:meta"])
+                            all_keys.extend([k, f"{k!r}:meta"])
                         result = await self.client.delete(*all_keys)
                         count += result // 2
                     if cursor == 0:
@@ -435,7 +435,7 @@ class RedisCache:
                         # Delete tagged keys and their metadata
                         all_keys = []
                         for member in members:
-                            all_keys.extend([member, f"{member}:meta"])
+                            all_keys.extend([member, f"{member!r}:meta"])
                         result = await self.client.delete(*all_keys)
                         count += result // 2
                         # Clean up tag set

@@ -129,7 +129,7 @@ class AnthropicProvider(BaseProvider, StreamingAnthropicMixin):
                 start_time = time.time()
 
                 # Make API call with explicit parameters
-                response = await self.client.messages.create(  # type: ignore[attr-defined]
+                response = await self.client.messages.create(  # type: ignore[attr-defined, call-overload, misc]
                     model=model,
                     messages=cleaned_messages,
                     temperature=temperature,

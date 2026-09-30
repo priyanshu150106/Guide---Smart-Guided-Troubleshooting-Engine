@@ -42,7 +42,7 @@ async def troubleshoot(
     cache = await get_cache(settings)
     
     if cache:
-        cached_data = await cache.get(cache_key)
+        cached_data = await cache.get(cache_key)  # type: ignore
         if cached_data:
             # 5. Cache HIT
             logger.info("CACHE HIT / MISS: HIT")
@@ -93,7 +93,7 @@ async def troubleshoot(
     if cache:
         try:
             logger.info("CACHE WRITE")
-            await cache.set(cache_key, response.model_dump_json())
+            await cache.set(cache_key, response.model_dump_json())  # type: ignore
         except Exception as e:
             logger.error(f"Failed to write to cache: {e}")
             

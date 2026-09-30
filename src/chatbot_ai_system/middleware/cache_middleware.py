@@ -241,7 +241,7 @@ class CacheMiddleware(BaseHTTPMiddleware):
             body = response.body
 
             # Parse response
-            response_data = json.loads(body) if body else {}
+            response_data = json.loads(body) if body else {}  # type: ignore
 
             # Cache the response
             await self.redis_cache.cache_response(

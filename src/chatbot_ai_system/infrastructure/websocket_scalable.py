@@ -667,7 +667,7 @@ class ScalableWebSocketManager:
                     )
 
                     # Remove from queue after successful delivery
-                    await self.redis.lrem(queue_key, 1, message_data)
+                    await self.redis.lrem(queue_key, 1, message_data)  # type: ignore
 
                 except json.JSONDecodeError:
                     continue

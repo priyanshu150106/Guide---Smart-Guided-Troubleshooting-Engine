@@ -40,7 +40,7 @@ class TracingMiddleware:
     ):
         self.service_name = service_name
         self.enabled = enabled
-        self.tracer = None
+        self.tracer: Any = None
 
         if self.enabled:
             self._initialize_tracing(jaeger_host, jaeger_port)
